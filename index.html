@@ -29,21 +29,33 @@
       <div class="text-2xl font-extrabold tracking-tighter text-transparent bg-clip-text bg-gradient-to-r from-brand-400 to-blue-500 cursor-pointer" onclick="showHomeView()">
         MONARCH ANIME
       </div>
-      <div class="flex items-center gap-4">
+      <div class="flex items-center gap-3">
         <span id="authStatusBadge" class="hidden text-xs text-emerald-400 font-semibold"></span>
-        <button id="authActionBtn" class="text-sm font-bold text-gray-300 hover:text-white" onclick="openLoginModal()">Log In</button>
+        <button id="createAccNavBtn" class="text-sm font-bold bg-brand-500 hover:bg-brand-400 text-white px-4 py-1.5 rounded-lg transition-colors" onclick="openAuthModal('signup')">Create Account</button>
+        <button id="authActionBtn" class="text-sm font-bold text-gray-300 hover:text-white px-3 py-1.5" onclick="openAuthModal('login')">Log In</button>
       </div>
     </div>
   </nav>
 
-  <!-- LOGIN MODAL -->
+  <!-- AUTH MODAL (CREATE ACCOUNT + LOG IN) -->
   <div id="loginModal" class="hidden fixed inset-0 z-[100] bg-black/80 flex items-center justify-center">
     <div class="bg-surface p-8 rounded-2xl border border-white/10 w-full max-w-md mx-4">
-      <h2 class="text-2xl font-bold text-white mb-6 text-center">Login to Monarch</h2>
+      <div class="grid grid-cols-2 gap-2 bg-dark p-1 rounded-xl mb-6 border border-white/10">
+        <button type="button" id="tabSignupBtn" onclick="setAuthMode('signup')" class="py-2 rounded-lg text-sm font-bold bg-brand-500 text-white transition-colors">Create Account</button>
+        <button type="button" id="tabLoginBtn" onclick="setAuthMode('login')" class="py-2 rounded-lg text-sm font-bold text-gray-400 hover:text-white transition-colors">Log In</button>
+      </div>
+
+      <h2 id="authModalTitle" class="text-2xl font-bold text-white mb-6 text-center">Create Account</h2>
+
+      <div id="usernameFieldWrap" class="mb-4">
+        <input id="usernameInput" type="text" placeholder="Enter your username" class="w-full p-3 rounded bg-dark border border-gray-600 text-white focus:outline-none focus:border-brand-500 transition-colors">
+      </div>
+
       <input id="emailInput" type="email" placeholder="Enter your email address" class="w-full mb-4 p-3 rounded bg-dark border border-gray-600 text-white focus:outline-none focus:border-brand-500 transition-colors">
       <input id="passwordInput" type="password" placeholder="Enter your password" class="w-full mb-6 p-3 rounded bg-dark border border-gray-600 text-white focus:outline-none focus:border-brand-500 transition-colors">
-      <button id="submitLoginBtn" class="w-full bg-brand-500 text-white p-3 rounded-lg font-bold hover:bg-brand-400 mb-4 transition-colors">Log In</button>
-      <button onclick="closeLoginModal()" class="w-full text-gray-400 hover:text-white text-sm transition-colors">Cancel</button>
+
+      <button id="submitAuthBtn" class="w-full bg-brand-500 text-white p-3 rounded-lg font-bold hover:bg-brand-400 mb-4 transition-colors">Create Account</button>
+      <button type="button" onclick="closeLoginModal()" class="w-full text-gray-400 hover:text-white text-sm transition-colors">Cancel</button>
     </div>
   </div>
 
@@ -88,8 +100,8 @@
 
   <script type="module">
     import { initializeApp } from "https://www.gstatic.com/firebasejs/11.6.1/firebase-app.js";
-    import { getFirestore, collection, onSnapshot, addDoc, serverTimestamp } from "https://www.gstatic.com/firebasejs/11.6.1/firebase-firestore.js";
-    import { getAuth, signInWithEmailAndPassword, signOut, onAuthStateChanged } from "https://www.gstatic.com/firebasejs/11.6.1/firebase-auth.js";
+    import { getFirestore, collection, onSnapshot, addDoc, setDoc, doc, serverTimestamp } from "https://www.gstatic.com/firebasejs/11.6.1/firebase-firestore.js";
+    import { getAuth, createUserWithEmailAndPassword, signInWithEmailAndPassword, signOut, updateProfile, onAuthStateChanged } from "https://www.gstatic.com/firebasejs/11.6.1/firebase-auth.js";
 
     const firebaseConfig = {
       apiKey: "AIzaSyDQ9SlXC5o4cCd1ayuHcUOobC1SfQddauM",
@@ -111,6 +123,7 @@
     const analyticsRef = collection(db, ...basePublicPath, 'analytics');
     const sessionsRef = collection(db, ...basePublicPath, 'sessions');
 
+    let authMode = 'signup';
     let publicEpisodes = [];
     let currentEpisode = null;
 
@@ -126,46 +139,109 @@
       searchQuery
     }).catch(err => console.warn("Visitor analytics log skipped:", err));
 
-    // 2. REAL AUTH STATE & LOGIN SESSION LOG
+    // 2. AUTH MODE SWITCHER (CREATE ACCOUNT vs LOG IN)
+    window.setAuthMode = function(mode) {
+      authMode = mode;
+      const isSignup = mode === 'signup';
+      document.getElementById('tabSignupBtn').className = isSignup
+        ? 'py-2 rounded-lg text-sm font-bold bg-brand-500 text-white transition-colors'
+        : 'py-2 rounded-lg text-sm font-bold text-gray-400 hover:text-white transition-colors';
+      document.getElementById('tabLoginBtn').className = !isSignup
+        ? 'py-2 rounded-lg text-sm font-bold bg-brand-500 text-white transition-colors'
+        : 'py-2 rounded-lg text-sm font-bold text-gray-400 hover:text-white transition-colors';
+
+      document.getElementById('authModalTitle').textContent = isSignup ? 'Create Account' : 'Login to Monarch';
+      document.getElementById('usernameFieldWrap').classList.toggle('hidden', !isSignup);
+      document.getElementById('submitAuthBtn').textContent = isSignup ? 'Create Account' : 'Log In';
+    };
+
+    window.openAuthModal = function(mode = 'signup') {
+      setAuthMode(mode);
+      document.getElementById('loginModal').classList.remove('hidden');
+    };
+
+    window.closeLoginModal = function() {
+      document.getElementById('loginModal').classList.add('hidden');
+    };
+
+    // 3. AUTH STATE & LOGIN SESSION LOG
     onAuthStateChanged(auth, (user) => {
       const badge = document.getElementById('authStatusBadge');
-      const btn = document.getElementById('authActionBtn');
+      const createBtn = document.getElementById('createAccNavBtn');
+      const loginBtn = document.getElementById('authActionBtn');
+
       if (user) {
-        badge.textContent = user.email;
+        const displayName = user.displayName || user.email;
+        badge.textContent = displayName;
         badge.classList.remove('hidden');
-        btn.textContent = 'Log Out';
-        btn.onclick = () => signOut(auth).catch(e => alert(e.message));
+        createBtn.classList.add('hidden');
+        loginBtn.textContent = 'Log Out';
+        loginBtn.onclick = () => signOut(auth).catch(e => alert(e.message));
       } else {
         badge.textContent = '';
         badge.classList.add('hidden');
-        btn.textContent = 'Log In';
-        btn.onclick = () => openLoginModal();
+        createBtn.classList.remove('hidden');
+        loginBtn.textContent = 'Log In';
+        loginBtn.onclick = () => openAuthModal('login');
       }
     });
 
-    document.getElementById('submitLoginBtn').addEventListener('click', async () => {
+    document.getElementById('submitAuthBtn').addEventListener('click', async () => {
+      const username = document.getElementById('usernameInput').value.trim();
       const email = document.getElementById('emailInput').value.trim();
       const password = document.getElementById('passwordInput').value;
+
       if (!email || !password) {
         alert("Please enter both email and password.");
         return;
       }
+
+      if (authMode === 'signup' && !username) {
+        alert("Please enter your username to create an account.");
+        return;
+      }
+
       try {
-        const cred = await signInWithEmailAndPassword(auth, email, password);
+        let cred;
+        if (authMode === 'signup') {
+          cred = await createUserWithEmailAndPassword(auth, email, password);
+          await updateProfile(cred.user, { displayName: username });
+          await setDoc(doc(db, ...basePublicPath, 'users', cred.user.uid), {
+            uid: cred.user.uid,
+            username,
+            email: cred.user.email,
+            createdAt: serverTimestamp()
+          }).catch(() => {});
+        } else {
+          cred = await signInWithEmailAndPassword(auth, email, password);
+        }
+
+        const resolvedUsername = authMode === 'signup'
+          ? username
+          : (cred.user.displayName || cred.user.email.split('@')[0]);
+
         await addDoc(sessionsRef, {
           uid: cred.user.uid,
+          username: resolvedUsername,
           email: cred.user.email,
+          action: authMode === 'signup' ? 'account_created' : 'login',
           loggedInAt: serverTimestamp(),
           userAgent: navigator.userAgent || ''
         }).catch(() => {});
-        alert("Logged in as " + cred.user.email);
+
+        alert(authMode === 'signup'
+          ? `Account created for ${resolvedUsername}!`
+          : `Logged in as ${resolvedUsername}!`);
+
+        document.getElementById('usernameInput').value = '';
+        document.getElementById('passwordInput').value = '';
         closeLoginModal();
       } catch (err) {
-        alert("Login failed: " + err.message);
+        alert((authMode === 'signup' ? "Account creation failed: " : "Login failed: ") + err.message);
       }
     });
 
-    // 3. REAL-TIME FIRESTORE SYNC FOR PUBLISHED PUBLIC EPISODES
+    // 4. REAL-TIME FIRESTORE SYNC FOR PUBLISHED PUBLIC EPISODES
     onSnapshot(animesRef, (snapshot) => {
       const episodes = [];
 
@@ -308,14 +384,6 @@
       const video = document.getElementById('mainVideo');
       if (video && !video.paused) video.pause();
       window.scrollTo(0, 0);
-    };
-
-    window.openLoginModal = function() {
-      document.getElementById('loginModal').classList.remove('hidden');
-    };
-
-    window.closeLoginModal = function() {
-      document.getElementById('loginModal').classList.add('hidden');
     };
 
     function escapeHtml(str) {

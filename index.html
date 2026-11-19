@@ -29,10 +29,45 @@
       <div class="text-2xl font-extrabold tracking-tighter text-transparent bg-clip-text bg-gradient-to-r from-brand-400 to-blue-500 cursor-pointer" onclick="showHomeView()">
         MONARCH ANIME
       </div>
-      <div class="flex items-center gap-3">
-        <span id="authStatusBadge" class="hidden text-xs text-emerald-400 font-semibold"></span>
+
+      <div class="flex items-center gap-3 relative">
+        <!-- Logged-out buttons -->
         <button id="createAccNavBtn" class="text-sm font-bold bg-brand-500 hover:bg-brand-400 text-white px-4 py-1.5 rounded-lg transition-colors" onclick="openAuthModal('signup')">Create Account</button>
         <button id="authActionBtn" class="text-sm font-bold text-gray-300 hover:text-white px-3 py-1.5" onclick="openAuthModal('login')">Log In</button>
+
+        <!-- Logged-in Animal Paper Profile Avatar & Dropdown -->
+        <div id="profileMenuWrap" class="hidden relative">
+          <button type="button" id="animalAvatarBtn" onclick="toggleProfileDropdown(event)" class="flex items-center gap-2 rounded-full border border-white/15 bg-surface hover:border-brand-500 p-1 pr-3 transition-colors cursor-pointer">
+            <img id="animalAvatarImg" alt="Animal Avatar" class="w-8 h-8 rounded-full object-cover bg-dark">
+            <span id="profileDisplayName" class="text-xs font-bold text-white max-w-[120px] truncate"></span>
+          </button>
+
+          <div id="profileDropdown" class="hidden absolute right-0 mt-2 w-60 rounded-xl bg-surface border border-white/10 shadow-2xl py-2 z-[120]">
+            <div class="px-4 py-2 border-b border-white/10 flex items-center gap-3">
+              <img id="dropdownAvatarImg" alt="Animal Avatar" class="w-10 h-10 rounded-full object-cover bg-dark">
+              <div class="overflow-hidden">
+                <div id="dropdownUserName" class="text-sm font-bold text-white truncate"></div>
+                <div id="dropdownAnimalLabel" class="text-[11px] text-brand-400 font-semibold"></div>
+              </div>
+            </div>
+
+            <button type="button" onclick="openSectionModal('profile')" class="w-full text-left px-4 py-2.5 text-sm text-gray-200 hover:bg-white/5 flex items-center gap-2">
+              <span>Profile</span>
+            </button>
+            <button type="button" onclick="openSectionModal('continue')" class="w-full text-left px-4 py-2.5 text-sm text-gray-200 hover:bg-white/5 flex items-center gap-2">
+              <span>Continue Watch</span>
+            </button>
+            <button type="button" onclick="openSectionModal('new-release')" class="w-full text-left px-4 py-2.5 text-sm text-gray-200 hover:bg-white/5 flex items-center gap-2">
+              <span>New Release Anime</span>
+            </button>
+
+            <div class="border-t border-white/10 mt-1 pt-1">
+              <button type="button" onclick="logoutCurrentUser()" class="w-full text-left px-4 py-2 text-sm font-bold text-rose-400 hover:bg-white/5">
+                Log Out
+              </button>
+            </div>
+          </div>
+        </div>
       </div>
     </div>
   </nav>
@@ -56,6 +91,17 @@
 
       <button id="submitAuthBtn" class="w-full bg-brand-500 text-white p-3 rounded-lg font-bold hover:bg-brand-400 mb-4 transition-colors">Create Account</button>
       <button type="button" onclick="closeLoginModal()" class="w-full text-gray-400 hover:text-white text-sm transition-colors">Cancel</button>
+    </div>
+  </div>
+
+  <!-- PROFILE / CONTINUE WATCH / NEW RELEASE MODAL -->
+  <div id="userSectionModal" class="hidden fixed inset-0 z-[110] bg-black/80 flex items-center justify-center p-4">
+    <div class="bg-surface rounded-2xl border border-white/10 w-full max-w-2xl max-h-[82vh] flex flex-col overflow-hidden">
+      <div class="flex items-center justify-between px-6 py-4 border-b border-white/10">
+        <h3 id="sectionModalTitle" class="text-xl font-bold text-white">Profile</h3>
+        <button type="button" onclick="closeSectionModal()" class="text-gray-400 hover:text-white text-lg font-bold">&times;</button>
+      </div>
+      <div id="sectionModalBody" class="p-6 overflow-y-auto space-y-4"></div>
     </div>
   </div>
 
@@ -126,6 +172,80 @@
     let authMode = 'signup';
     let publicEpisodes = [];
     let currentEpisode = null;
+    let currentUser = null;
+
+    // Auto-generate deterministic paper-cut animal SVG avatar from seed string (no email exposed)
+    function generateAnimalPaperAvatar(seed) {
+      const animals = [
+        { name: 'Paper Fox', primary: '#f97316', secondary: '#ffedd5', ear: '#ea580c' },
+        { name: 'Paper Wolf', primary: '#64748b', secondary: '#f1f5f9', ear: '#475569' },
+        { name: 'Paper Owl', primary: '#a855f7', secondary: '#f3e8ff', ear: '#7e22ce' },
+        { name: 'Paper Panda', primary: '#e2e8f0', secondary: '#ffffff', ear: '#1e293b' },
+        { name: 'Paper Cat', primary: '#f59e0b', secondary: '#fef3c7', ear: '#d97706' }
+      ];
+      let hash = 0;
+      const str = String(seed || 'monarch');
+      for (let i = 0; i < str.length; i++) {
+        hash = ((hash << 5) - hash) + str.charCodeAt(i);
+        hash |= 0;
+      }
+      const chosen = animals[Math.abs(hash) % animals.length];
+
+      const svg = `
+        <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 120 120">
+          <defs>
+            <filter id="paperShadow" x="-15%" y="-15%" width="130%" height="130%">
+              <feDropShadow dx="0" dy="3" stdDeviation="3" flood-color="#000000" flood-opacity="0.35"/>
+            </filter>
+          </defs>
+          <rect width="120" height="120" rx="60" fill="#14141b"/>
+          <!-- Paper ears -->
+          <polygon points="24,52 36,16 54,44" fill="${chosen.ear}" filter="url(#paperShadow)"/>
+          <polygon points="96,52 84,16 66,44" fill="${chosen.ear}" filter="url(#paperShadow)"/>
+          <!-- Paper face layers -->
+          <polygon points="60,26 96,56 82,96 38,96 24,56" fill="${chosen.primary}" filter="url(#paperShadow)"/>
+          <polygon points="60,52 84,72 60,98 36,72" fill="${chosen.secondary}"/>
+          <!-- Eyes & nose -->
+          <circle cx="46" cy="58" r="5" fill="#09090b"/>
+          <circle cx="74" cy="58" r="5" fill="#09090b"/>
+          <polygon points="60,67 54,75 66,75" fill="#09090b"/>
+        </svg>
+      `.trim();
+
+      return {
+        animalName: chosen.name,
+        dataUrl: 'data:image/svg+xml;charset=UTF-8,' + encodeURIComponent(svg)
+      };
+    }
+
+    function getWatchHistoryStorageKey(uid) {
+      return `monarch_watch_history_${uid || 'guest'}`;
+    }
+
+    function loadWatchHistory(uid) {
+      try {
+        const raw = localStorage.getItem(getWatchHistoryStorageKey(uid));
+        const parsed = raw ? JSON.parse(raw) : [];
+        return Array.isArray(parsed) ? parsed : [];
+      } catch {
+        return [];
+      }
+    }
+
+    function recordEpisodeWatch(ep) {
+      if (!currentUser || !ep) return;
+      const list = loadWatchHistory(currentUser.uid).filter(item => item.id !== ep.id);
+      list.unshift({
+        id: ep.id,
+        animeTitle: ep.animeTitle,
+        seasonName: ep.seasonName,
+        epNumber: ep.epNumber,
+        epTitle: ep.epTitle,
+        thumbnailUrl: ep.thumbnailUrl || '',
+        watchedAt: Date.now()
+      });
+      localStorage.setItem(getWatchHistoryStorageKey(currentUser.uid), JSON.stringify(list.slice(0, 20)));
+    }
 
     // 1. REAL VISITOR TRACKING
     const params = new URLSearchParams(window.location.search);
@@ -164,27 +284,123 @@
       document.getElementById('loginModal').classList.add('hidden');
     };
 
-    // 3. AUTH STATE & LOGIN SESSION LOG
+    // 3. AUTH STATE & ANIMAL AVATAR RENDERING
     onAuthStateChanged(auth, (user) => {
-      const badge = document.getElementById('authStatusBadge');
+      currentUser = user;
       const createBtn = document.getElementById('createAccNavBtn');
       const loginBtn = document.getElementById('authActionBtn');
+      const profileWrap = document.getElementById('profileMenuWrap');
 
       if (user) {
-        const displayName = user.displayName || user.email;
-        badge.textContent = displayName;
-        badge.classList.remove('hidden');
+        const displayName = user.displayName || 'Member';
+        const avatar = generateAnimalPaperAvatar(user.uid || displayName);
+
+        document.getElementById('animalAvatarImg').src = avatar.dataUrl;
+        document.getElementById('dropdownAvatarImg').src = avatar.dataUrl;
+        document.getElementById('profileDisplayName').textContent = displayName;
+        document.getElementById('dropdownUserName').textContent = displayName;
+        document.getElementById('dropdownAnimalLabel').textContent = avatar.animalName;
+
         createBtn.classList.add('hidden');
-        loginBtn.textContent = 'Log Out';
-        loginBtn.onclick = () => signOut(auth).catch(e => alert(e.message));
+        loginBtn.classList.add('hidden');
+        profileWrap.classList.remove('hidden');
       } else {
-        badge.textContent = '';
-        badge.classList.add('hidden');
+        document.getElementById('profileDropdown').classList.add('hidden');
+        profileWrap.classList.add('hidden');
         createBtn.classList.remove('hidden');
-        loginBtn.textContent = 'Log In';
-        loginBtn.onclick = () => openAuthModal('login');
+        loginBtn.classList.remove('hidden');
       }
     });
+
+    window.toggleProfileDropdown = function(event) {
+      event.stopPropagation();
+      document.getElementById('profileDropdown').classList.toggle('hidden');
+    };
+
+    document.addEventListener('click', (e) => {
+      const wrap = document.getElementById('profileMenuWrap');
+      if (wrap && !wrap.contains(e.target)) {
+        document.getElementById('profileDropdown').classList.add('hidden');
+      }
+    });
+
+    window.logoutCurrentUser = async function() {
+      try {
+        await signOut(auth);
+      } catch (err) {
+        alert("Logout failed: " + err.message);
+      }
+    };
+
+    window.openSectionModal = function(section) {
+      document.getElementById('profileDropdown').classList.add('hidden');
+      const modal = document.getElementById('userSectionModal');
+      const titleEl = document.getElementById('sectionModalTitle');
+      const bodyEl = document.getElementById('sectionModalBody');
+
+      if (section === 'profile') {
+        titleEl.textContent = 'Profile';
+        const name = currentUser?.displayName || 'Member';
+        const avatar = generateAnimalPaperAvatar(currentUser?.uid || name);
+        const historyCount = loadWatchHistory(currentUser?.uid).length;
+        bodyEl.innerHTML = `
+          <div class="flex items-center gap-4 bg-dark p-4 rounded-xl border border-white/10">
+            <img src="${escapeAttr(avatar.dataUrl)}" alt="Animal Avatar" class="w-16 h-16 rounded-full object-cover">
+            <div>
+              <div class="text-lg font-bold text-white">${escapeHtml(name)}</div>
+              <div class="text-xs text-brand-400 font-semibold">${escapeHtml(avatar.animalName)}</div>
+              <div class="text-xs text-gray-400 mt-1">Episodes Watched: ${historyCount}</div>
+            </div>
+          </div>
+        `;
+      } else if (section === 'continue') {
+        titleEl.textContent = 'Continue Watch';
+        const history = loadWatchHistory(currentUser?.uid);
+        if (history.length === 0) {
+          bodyEl.innerHTML = `<div class="text-gray-400 text-sm">No episodes watched yet. Start watching any published episode to see it here.</div>`;
+        } else {
+          bodyEl.innerHTML = history.map(item => {
+            const idx = publicEpisodes.findIndex(ep => ep.id === item.id);
+            const clickAttr = idx >= 0 ? `onclick="closeSectionModal(); playEpisodeByIndex(${idx});"` : '';
+            return `
+              <div ${clickAttr} class="flex items-center justify-between gap-3 bg-dark p-3 rounded-xl border border-white/10 ${idx >= 0 ? 'cursor-pointer hover:border-brand-500' : ''}">
+                <div class="overflow-hidden">
+                  <div class="text-xs text-brand-400 font-bold truncate">${escapeHtml(item.animeTitle)} • ${escapeHtml(item.seasonName)}</div>
+                  <div class="text-sm font-bold text-white truncate">Ep ${escapeHtml(String(item.epNumber))}: ${escapeHtml(item.epTitle)}</div>
+                </div>
+                ${idx >= 0 ? `<span class="text-xs font-bold bg-brand-500 text-white px-3 py-1 rounded-lg shrink-0">Resume</span>` : ''}
+              </div>
+            `;
+          }).join('');
+        }
+      } else if (section === 'new-release') {
+        titleEl.textContent = 'New Release Anime';
+        if (publicEpisodes.length === 0) {
+          bodyEl.innerHTML = `<div class="text-gray-400 text-sm">No new release episodes published yet.</div>`;
+        } else {
+          bodyEl.innerHTML = publicEpisodes.slice(0, 8).map((ep, idx) => `
+            <div onclick="closeSectionModal(); playEpisodeByIndex(${idx});" class="flex items-center gap-4 bg-dark p-3 rounded-xl border border-white/10 hover:border-brand-500 cursor-pointer">
+              <div class="w-24 aspect-video rounded-lg overflow-hidden bg-surface shrink-0 flex items-center justify-center">
+                ${ep.thumbnailUrl
+                  ? `<img src="${escapeAttr(ep.thumbnailUrl)}" alt="${escapeAttr(ep.epTitle)}" class="w-full h-full object-cover">`
+                  : `<span class="text-[11px] text-gray-500">No IMG</span>`}
+              </div>
+              <div class="overflow-hidden">
+                <div class="text-xs text-brand-400 font-bold truncate">${escapeHtml(ep.animeTitle)}</div>
+                <div class="text-sm font-bold text-white truncate">Ep ${escapeHtml(String(ep.epNumber))}: ${escapeHtml(ep.epTitle)}</div>
+                <div class="text-xs text-gray-400 truncate">${escapeHtml(ep.seasonName)}</div>
+              </div>
+            </div>
+          `).join('');
+        }
+      }
+
+      modal.classList.remove('hidden');
+    };
+
+    window.closeSectionModal = function() {
+      document.getElementById('userSectionModal').classList.add('hidden');
+    };
 
     document.getElementById('submitAuthBtn').addEventListener('click', async () => {
       const username = document.getElementById('usernameInput').value.trim();
@@ -347,6 +563,7 @@
       const ep = publicEpisodes[index];
       if (!ep || !ep.videoUrl) return;
       currentEpisode = ep;
+      recordEpisodeWatch(ep);
 
       const video = document.getElementById('mainVideo');
       const source = document.getElementById('videoSource');

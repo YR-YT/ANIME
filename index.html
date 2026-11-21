@@ -21,9 +21,14 @@
   <style>
     @import url('https://fonts.googleapis.com/css2?family=Plus+Jakarta+Sans:wght@400;500;700;800&display=swap');
     body { font-family: 'Plus Jakarta Sans', sans-serif; background-color: #09090b; color: #f4f4f5; }
+    #theaterBackdrop { display: none; position: fixed; inset: 0; background: rgba(0,0,0,0.85); z-index: 45; }
+    body.theater-on #theaterBackdrop { display: block; }
+    body.theater-on #playerSection { position: relative; z-index: 50; }
   </style>
 </head>
 <body class="antialiased min-h-screen flex flex-col">
+  <div id="theaterBackdrop" onclick="toggleTheaterMode()"></div>
+
   <nav class="fixed w-full z-50 bg-dark/90 backdrop-blur-xl border-b border-white/5 p-4">
     <div class="flex justify-between items-center max-w-[1200px] mx-auto">
       <div class="text-2xl font-extrabold tracking-tighter text-transparent bg-clip-text bg-gradient-to-r from-brand-400 to-blue-500 cursor-pointer" onclick="showHomeView()">
@@ -31,11 +36,9 @@
       </div>
 
       <div class="flex items-center gap-3 relative">
-        <!-- Logged-out buttons -->
         <button id="createAccNavBtn" class="text-sm font-bold bg-brand-500 hover:bg-brand-400 text-white px-4 py-1.5 rounded-lg transition-colors" onclick="openAuthModal('signup')">Create Account</button>
         <button id="authActionBtn" class="text-sm font-bold text-gray-300 hover:text-white px-3 py-1.5" onclick="openAuthModal('login')">Log In</button>
 
-        <!-- Logged-in Animal Paper Profile Avatar & Dropdown -->
         <div id="profileMenuWrap" class="hidden relative">
           <button type="button" id="animalAvatarBtn" onclick="toggleProfileDropdown(event)" class="flex items-center gap-2 rounded-full border border-white/15 bg-surface hover:border-brand-500 p-1 pr-3 transition-colors cursor-pointer">
             <img id="animalAvatarImg" alt="Animal Avatar" class="w-8 h-8 rounded-full object-cover bg-dark">
@@ -72,7 +75,7 @@
     </div>
   </nav>
 
-  <!-- AUTH MODAL (CREATE ACCOUNT + LOG IN) -->
+  <!-- AUTH MODAL -->
   <div id="loginModal" class="hidden fixed inset-0 z-[100] bg-black/80 flex items-center justify-center">
     <div class="bg-surface p-8 rounded-2xl border border-white/10 w-full max-w-md mx-4">
       <div class="grid grid-cols-2 gap-2 bg-dark p-1 rounded-xl mb-6 border border-white/10">
@@ -94,7 +97,7 @@
     </div>
   </div>
 
-  <!-- PROFILE / CONTINUE WATCH / NEW RELEASE MODAL -->
+  <!-- SECTION MODAL -->
   <div id="userSectionModal" class="hidden fixed inset-0 z-[110] bg-black/80 flex items-center justify-center p-4">
     <div class="bg-surface rounded-2xl border border-white/10 w-full max-w-2xl max-h-[82vh] flex flex-col overflow-hidden">
       <div class="flex items-center justify-between px-6 py-4 border-b border-white/10">
@@ -126,21 +129,44 @@
     </div>
   </div>
 
-  <!-- WATCH VIEW -->
+  <!-- WATCH VIEW (MULTI-SERVER & SMART PLAYER) -->
   <div id="watchView" class="hidden flex-1 flex-col pt-24 px-6 pb-10 max-w-[1200px] mx-auto w-full">
-    <button onclick="showHomeView()" class="mb-6 text-sm font-bold text-gray-400 hover:text-white self-start">&larr; Back to Home</button>
+    <button onclick="showHomeView()" class="mb-4 text-sm font-bold text-gray-400 hover:text-white self-start">&larr; Back to Home</button>
 
-    <div class="bg-black aspect-video rounded-2xl shadow-2xl flex items-center justify-center relative overflow-hidden border border-white/10">
-      <video id="mainVideo" controls class="w-full h-full object-contain">
-        <source id="videoSource" src="" type="video/mp4">
-      </video>
+    <!-- Player Container -->
+    <div id="playerSection" class="bg-black aspect-video rounded-2xl shadow-2xl flex items-center justify-center relative overflow-hidden border border-white/10">
+      <div id="playerBox" class="w-full h-full"></div>
     </div>
 
-    <div class="mt-6 bg-surface p-5 rounded-2xl border border-white/5">
+    <!-- AnimeSuge-Style Action Bar -->
+    <div class="mt-3 flex flex-wrap items-center justify-between gap-3 bg-surface/60 p-3 rounded-xl border border-white/5 text-xs text-gray-300">
+      <div class="flex items-center gap-4">
+        <label class="flex items-center gap-1.5 cursor-pointer">
+          <input type="checkbox" id="autoNextToggle" class="accent-brand-500">
+          <span>Auto Next</span>
+        </label>
+        <button type="button" onclick="toggleTheaterMode()" class="hover:text-white flex items-center gap-1">
+          <span id="lightIcon">&#9680;</span> <span id="lightText">Light: Off</span>
+        </button>
+      </div>
+
+      <!-- Multi-Server Selector -->
+      <div class="flex items-center gap-2">
+        <span class="text-gray-500 font-bold">SERVER:</span>
+        <div id="serverButtonsList" class="flex items-center gap-1.5"></div>
+      </div>
+    </div>
+
+    <!-- Metadata & Episode Selector -->
+    <div class="mt-4 bg-surface p-5 rounded-2xl border border-white/5">
       <div class="text-xs uppercase tracking-wider text-brand-400 font-bold mb-1" id="watchMeta"></div>
       <h2 id="watchTitle" class="text-2xl font-black text-white mb-2">Select an Episode</h2>
       <p id="watchDesc" class="text-gray-400 text-sm">No description available.</p>
-      <div id="episodeListContainer" class="mt-5 pt-4 border-t border-white/10 flex flex-wrap gap-2"></div>
+
+      <div class="mt-4 pt-4 border-t border-white/10">
+        <div class="text-xs font-bold text-gray-400 mb-2">EPISODES</div>
+        <div id="episodeListContainer" class="flex flex-wrap gap-2"></div>
+      </div>
     </div>
   </div>
 
@@ -171,10 +197,11 @@
 
     let authMode = 'signup';
     let publicEpisodes = [];
+    let currentEpisodeIndex = -1;
     let currentEpisode = null;
     let currentUser = null;
+    let activeServerIndex = 0;
 
-    // Auto-generate deterministic paper-cut animal SVG avatar from seed string (no email exposed)
     function generateAnimalPaperAvatar(seed) {
       const animals = [
         { name: 'Paper Fox', primary: '#f97316', secondary: '#ffedd5', ear: '#ea580c' },
@@ -199,13 +226,10 @@
             </filter>
           </defs>
           <rect width="120" height="120" rx="60" fill="#14141b"/>
-          <!-- Paper ears -->
           <polygon points="24,52 36,16 54,44" fill="${chosen.ear}" filter="url(#paperShadow)"/>
           <polygon points="96,52 84,16 66,44" fill="${chosen.ear}" filter="url(#paperShadow)"/>
-          <!-- Paper face layers -->
           <polygon points="60,26 96,56 82,96 38,96 24,56" fill="${chosen.primary}" filter="url(#paperShadow)"/>
           <polygon points="60,52 84,72 60,98 36,72" fill="${chosen.secondary}"/>
-          <!-- Eyes & nose -->
           <circle cx="46" cy="58" r="5" fill="#09090b"/>
           <circle cx="74" cy="58" r="5" fill="#09090b"/>
           <polygon points="60,67 54,75 66,75" fill="#09090b"/>
@@ -247,7 +271,6 @@
       localStorage.setItem(getWatchHistoryStorageKey(currentUser.uid), JSON.stringify(list.slice(0, 20)));
     }
 
-    // 1. REAL VISITOR TRACKING
     const params = new URLSearchParams(window.location.search);
     const searchQuery = params.get('q') || params.get('search') || '';
     addDoc(analyticsRef, {
@@ -257,9 +280,8 @@
       referrer: document.referrer || '',
       source: document.referrer ? 'External Referrer' : 'Direct / Vercel Visit',
       searchQuery
-    }).catch(err => console.warn("Visitor analytics log skipped:", err));
+    }).catch(() => {});
 
-    // 2. AUTH MODE SWITCHER (CREATE ACCOUNT vs LOG IN)
     window.setAuthMode = function(mode) {
       authMode = mode;
       const isSignup = mode === 'signup';
@@ -284,7 +306,6 @@
       document.getElementById('loginModal').classList.add('hidden');
     };
 
-    // 3. AUTH STATE & ANIMAL AVATAR RENDERING
     onAuthStateChanged(auth, (user) => {
       currentUser = user;
       const createBtn = document.getElementById('createAccNavBtn');
@@ -445,10 +466,6 @@
           userAgent: navigator.userAgent || ''
         }).catch(() => {});
 
-        alert(authMode === 'signup'
-          ? `Account created for ${resolvedUsername}!`
-          : `Logged in as ${resolvedUsername}!`);
-
         document.getElementById('usernameInput').value = '';
         document.getElementById('passwordInput').value = '';
         closeLoginModal();
@@ -457,7 +474,6 @@
       }
     });
 
-    // 4. REAL-TIME FIRESTORE SYNC FOR PUBLISHED PUBLIC EPISODES
     onSnapshot(animesRef, (snapshot) => {
       const episodes = [];
 
@@ -478,6 +494,12 @@
           const eps = Array.isArray(season.episodes) ? season.episodes : [];
           eps.forEach(ep => {
             if (!ep || !ep.videoUrl) return;
+
+            const servers = [];
+            if (ep.videoUrl) servers.push({ name: 'Server 1 (Primary)', url: ep.videoUrl });
+            if (ep.backupUrl) servers.push({ name: 'Server 2 (Backup)', url: ep.backupUrl });
+            if (ep.embedUrl) servers.push({ name: 'Server 3 (Embed)', url: ep.embedUrl });
+
             episodes.push({
               id: `${docSnap.id}_${seasonName}_${ep.episodeNumber || ''}_${ep.title || ''}`,
               animeTitle,
@@ -485,8 +507,8 @@
               epNumber: ep.episodeNumber || '',
               epTitle: ep.title || 'Episode',
               description,
-              videoUrl: ep.videoUrl,
               thumbnailUrl: ep.thumbnailUrl || '',
+              servers,
               createdMs
             });
           });
@@ -498,8 +520,6 @@
 
       renderHomeAndGrid();
       renderEpisodeSwitcher();
-    }, (err) => {
-      console.error("Firestore animes sync error:", err);
     });
 
     function renderHomeAndGrid() {
@@ -550,36 +570,87 @@
         return;
       }
       container.innerHTML = publicEpisodes.map((ep, idx) => {
-        const isActive = currentEpisode && currentEpisode.id === ep.id;
+        const isActive = currentEpisodeIndex === idx;
         return `
           <button type="button" onclick="playEpisodeByIndex(${idx})" class="px-3 py-1.5 rounded-lg text-xs font-bold transition-colors ${isActive ? 'bg-brand-500 text-white' : 'bg-dark text-gray-300 hover:bg-white/10 border border-white/10'}">
-            ${escapeHtml(ep.animeTitle)} • Ep ${escapeHtml(String(ep.epNumber))}
+            Ep ${escapeHtml(String(ep.epNumber))}: ${escapeHtml(ep.epTitle)}
           </button>
         `;
       }).join('');
     }
 
+    function renderServerButtons() {
+      const serverWrap = document.getElementById('serverButtonsList');
+      if (!serverWrap || !currentEpisode || !currentEpisode.servers) {
+        if (serverWrap) serverWrap.innerHTML = '';
+        return;
+      }
+
+      serverWrap.innerHTML = currentEpisode.servers.map((s, sIdx) => {
+        const isActive = activeServerIndex === sIdx;
+        return `
+          <button type="button" onclick="switchActiveServer(${sIdx})" class="px-2.5 py-1 rounded text-xs font-semibold transition-colors ${isActive ? 'bg-brand-500 text-white' : 'bg-dark text-gray-400 hover:text-white border border-white/10'}">
+            ${escapeHtml(s.name)}
+          </button>
+        `;
+      }).join('');
+    }
+
+    window.switchActiveServer = function(serverIdx) {
+      if (!currentEpisode || !currentEpisode.servers || !currentEpisode.servers[serverIdx]) return;
+      activeServerIndex = serverIdx;
+      renderServerButtons();
+      mountPlayerSource(currentEpisode.servers[serverIdx].url, currentEpisode.thumbnailUrl);
+    };
+
+    function isDirectVideoUrl(url) {
+      const clean = (url || '').split('?')[0].toLowerCase();
+      return clean.endsWith('.mp4') || clean.endsWith('.webm') || clean.endsWith('.ogg');
+    }
+
+    function mountPlayerSource(url, posterUrl) {
+      const box = document.getElementById('playerBox');
+      if (!box || !url) return;
+
+      if (isDirectVideoUrl(url)) {
+        box.innerHTML = `
+          <video id="activeMediaVideo" controls autoplay class="w-full h-full object-contain" ${posterUrl ? `poster="${escapeAttr(posterUrl)}"` : ''}>
+            <source src="${escapeAttr(url)}" type="video/mp4">
+            Your browser does not support HTML5 video.
+          </video>
+        `;
+        const v = document.getElementById('activeMediaVideo');
+        v.addEventListener('ended', handleVideoEnded);
+      } else {
+        box.innerHTML = `
+          <iframe id="activeMediaFrame" src="${escapeAttr(url)}" class="w-full h-full border-0" allow="accelerometer; autoplay; clipboard-write; encrypted-media; gyroscope; picture-in-picture" allowfullscreen></iframe>
+        `;
+      }
+    }
+
+    function handleVideoEnded() {
+      const autoNext = document.getElementById('autoNextToggle')?.checked;
+      if (autoNext && currentEpisodeIndex >= 0 && currentEpisodeIndex < publicEpisodes.length - 1) {
+        playEpisodeByIndex(currentEpisodeIndex + 1);
+      }
+    }
+
     window.playEpisodeByIndex = function(index) {
       const ep = publicEpisodes[index];
-      if (!ep || !ep.videoUrl) return;
-      currentEpisode = ep;
-      recordEpisodeWatch(ep);
+      if (!ep || !ep.servers || ep.servers.length === 0) return;
 
-      const video = document.getElementById('mainVideo');
-      const source = document.getElementById('videoSource');
-      if (ep.thumbnailUrl) {
-        video.setAttribute('poster', ep.thumbnailUrl);
-      } else {
-        video.removeAttribute('poster');
-      }
-      source.src = ep.videoUrl;
-      video.load();
+      currentEpisodeIndex = index;
+      currentEpisode = ep;
+      activeServerIndex = 0;
+      recordEpisodeWatch(ep);
 
       document.getElementById('watchMeta').textContent = `${ep.animeTitle} • ${ep.seasonName} • Episode ${ep.epNumber}`;
       document.getElementById('watchTitle').textContent = ep.epTitle;
       document.getElementById('watchDesc').textContent = ep.description || 'No description provided.';
 
+      renderServerButtons();
       renderEpisodeSwitcher();
+      mountPlayerSource(ep.servers[0].url, ep.thumbnailUrl);
       showWatchView();
     };
 
@@ -587,6 +658,13 @@
       if (publicEpisodes.length > 0) {
         playEpisodeByIndex(0);
       }
+    };
+
+    window.toggleTheaterMode = function() {
+      document.body.classList.toggle('theater-on');
+      const isOn = document.body.classList.contains('theater-on');
+      document.getElementById('lightIcon').innerHTML = isOn ? '&#9679;' : '&#9680;';
+      document.getElementById('lightText').textContent = isOn ? 'Light: On' : 'Light: Off';
     };
 
     window.showWatchView = function() {
@@ -598,8 +676,9 @@
     window.showHomeView = function() {
       document.getElementById('watchView').classList.add('hidden');
       document.getElementById('homeView').classList.remove('hidden');
-      const video = document.getElementById('mainVideo');
-      if (video && !video.paused) video.pause();
+      document.body.classList.remove('theater-on');
+      const box = document.getElementById('playerBox');
+      if (box) box.innerHTML = '';
       window.scrollTo(0, 0);
     };
 
